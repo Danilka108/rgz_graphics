@@ -13,7 +13,7 @@ pub(crate) struct RgzRenderer {
 }
 
 fn main() {
-    dbg!(generate_points(100));
+    let points = generate_points(100);
 }
 
 fn generate_points(iters_count: isize) -> Vec<Point> {
