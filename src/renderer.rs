@@ -1,6 +1,10 @@
 use gl_window_provider::Renderer;
 use glam::{Mat4, Vec3};
 use std::ffi::CString;
+use winit::{
+    dpi::PhysicalPosition,
+    event::{ElementState, MouseButton},
+};
 
 use crate::{
     array::{Array, AttribPointer, Size},
@@ -11,6 +15,10 @@ pub(crate) struct RgzRenderer {
     gl: gl::Gl,
     array: Array,
     program: ShaderProgram,
+    left_mouse_btn_pressed: bool,
+    last_cursor_pos: Option<PhysicalPosition<f64>>,
+    polar_angle: f32,
+    azimuthal_angle: f32,
 }
 
 fn generate_vertices(iters_count: isize) -> Vec<f32> {
@@ -27,7 +35,7 @@ fn generate_vertices(iters_count: isize) -> Vec<f32> {
     for angle_i in 0..iters_count {
         for height_i in 0..(iters_count + 1) {
             let angle = angle_i as f32 * 360.0 / (iters_count as f32);
-            let height = (height_i as f32) * 2.0 * radius / (iters_count as f32);
+            let height = (height_i - iters_count / 2) as f32 * 2.0 * radius / (iters_count as f32);
 
             vertex_data.push(radius * angle.cos());
             vertex_data.push(radius * angle.sin());
@@ -109,8 +117,37 @@ impl Renderer for RgzRenderer {
             },
         );
 
-        Self { gl, array, program }
+        Self {
+            gl,
+            array,
+            program,
+            left_mouse_btn_pressed: false,
+            last_cursor_pos: None,
+            polar_angle: 0.0,
+            azimuthal_angle: 0.0,
+        }
     }
+
+    fn mouse_input_hook(&mut self, state: ElementState, button: MouseButton) {
+        self.left_mouse_btn_pressed =
+            matches!(state, ElementState::Pressed) && matches!(button, MouseButton::Left);
+    }
+
+    // fn mouse_wheel_hook(&mut self, delta: MouseScrollDelta, phase: TouchPhase) {}
+
+    // fn keyboard_input_hook(&mut self, input: KeyboardInput) {}
+
+    fn cursor_move_hook(&mut self, next_pos: PhysicalPosition<f64>) {
+        if let Some(prev_pos) = self.last_cursor_pos {
+            self.update_rotation_angles(prev_pos, next_pos);
+        }
+
+        self.last_cursor_pos = Some(next_pos);
+    }
+
+    // fn cursor_enter_hook(&mut self) {}
+
+    // fn cursor_left_hook(&mut self) {}
 
     fn draw(&mut self) {
         unsafe {
@@ -120,10 +157,12 @@ impl Renderer for RgzRenderer {
 
         self.program.use_program();
 
-        self.program.set_uniform_mat4(
-            "uRotation",
-            Mat4::from_rotation_x(std::f32::consts::FRAC_PI_2 / 3.0).to_cols_array(),
-        );
+        let camera_pos_matrix =
+            Mat4::from_rotation_x(self.polar_angle) * Mat4::from_rotation_y(self.azimuthal_angle);
+
+        self.program
+            .set_uniform_mat4("uCameraPos", camera_pos_matrix.to_cols_array());
+
         self.program.set_uniform_mat4(
             "uScale",
             Mat4::from_scale(Vec3::new(0.4, 0.4, 0.4)).to_cols_array(),
@@ -140,5 +179,41 @@ impl Renderer for RgzRenderer {
         unsafe {
             self.gl.Viewport(0, 0, width, height);
         }
+    }
+}
+
+impl RgzRenderer {
+    const DELTA_X_INTO_DELTA_ANGLE_FACTOR: f32 = std::f32::consts::FRAC_PI_2 / (1920.0 / 2.0);
+    const DELTA_Y_INTO_DELTA_ANGLE_FACTOR: f32 = std::f32::consts::FRAC_PI_2 / (1280.0 / 2.0);
+
+    fn update_rotation_angles(
+        &mut self,
+        prev_pos: PhysicalPosition<f64>,
+        next_pos: PhysicalPosition<f64>,
+    ) {
+        if !self.left_mouse_btn_pressed {
+            return;
+        }
+
+        let delta_x = next_pos.x - prev_pos.x;
+        let delta_y = next_pos.y - prev_pos.y;
+
+        let delta_polar_angle = delta_y as f32 * Self::DELTA_Y_INTO_DELTA_ANGLE_FACTOR;
+        let delta_azimuthal_angle = delta_x as f32 * Self::DELTA_X_INTO_DELTA_ANGLE_FACTOR;
+
+        let polar_angle = self.polar_angle + delta_polar_angle;
+        let polar_angle = if polar_angle > std::f32::consts::FRAC_PI_2 {
+            std::f32::consts::FRAC_PI_2
+        } else if polar_angle < -std::f32::consts::FRAC_PI_2 {
+            -std::f32::consts::FRAC_PI_2
+        } else {
+            polar_angle
+        };
+
+        let azimuthal_angle =
+            (self.azimuthal_angle + delta_azimuthal_angle) % (std::f32::consts::PI * 2.0);
+
+        self.polar_angle = polar_angle;
+        self.azimuthal_angle = azimuthal_angle;
     }
 }

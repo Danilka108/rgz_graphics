@@ -3,8 +3,8 @@
 in vec3 pointPos;
 
 uniform mat4 uScale;
-uniform mat4 uRotation;
+uniform mat4 uCameraPos;
 
 void main() {
-  gl_Position = uRotation * uScale * vec4(pointPos, 1.0);
+  gl_Position = uCameraPos * uScale * vec4(pointPos, 1.0);
 }

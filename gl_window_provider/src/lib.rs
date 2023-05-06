@@ -9,7 +9,8 @@ use glutin::{
 use glutin_winit::DisplayBuilder;
 use raw_window_handle::HasRawWindowHandle;
 use winit::{
-    event::Event,
+    dpi::PhysicalPosition,
+    event::{ElementState, Event, KeyboardInput, MouseButton, MouseScrollDelta, TouchPhase},
     event_loop::{ControlFlow, EventLoop, EventLoopWindowTarget},
     window::{Window, WindowBuilder},
 };
@@ -20,6 +21,18 @@ pub trait Renderer {
     fn new<D>(gl_display: &D) -> Self
     where
         D: GlDisplay;
+
+    fn mouse_input_hook(&mut self, state: ElementState, button: MouseButton) {}
+
+    fn mouse_wheel_hook(&mut self, delta: MouseScrollDelta, phase: TouchPhase) {}
+
+    fn keyboard_input_hook(&mut self, input: KeyboardInput) {}
+
+    fn cursor_move_hook(&mut self, pos: PhysicalPosition<f64>) {}
+
+    fn cursor_enter_hook(&mut self) {}
+
+    fn cursor_left_hook(&mut self) {}
 
     fn draw(&mut self);
 

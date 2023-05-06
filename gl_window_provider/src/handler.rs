@@ -9,7 +9,7 @@ use glutin::{
 use glutin_winit::GlWindow;
 use winit::{
     dpi::PhysicalSize,
-    event::{Event, WindowEvent},
+    event::{DeviceEvent, Event, WindowEvent},
     event_loop::{ControlFlow, EventLoopWindowTarget},
     window::{Window, WindowBuilder},
 };
@@ -50,7 +50,7 @@ where
             } => {
                 self.handle_window_event(control_flow, win_event);
             }
-            Event::RedrawEventsCleared => self.handle_redraw_event(),
+            Event::RedrawRequested(_) => self.handle_redraw_event(),
             _ => (),
         }
     }
@@ -96,6 +96,36 @@ where
             WindowEvent::Resized(size) => self.resize(size),
             WindowEvent::CloseRequested => {
                 control_flow.set_exit();
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                self.renderer
+                    .as_mut()
+                    .map(|renderer| renderer.mouse_input_hook(state, button));
+            }
+            WindowEvent::MouseWheel { delta, phase, .. } => {
+                self.renderer
+                    .as_mut()
+                    .map(|renderer| renderer.mouse_wheel_hook(delta, phase));
+            }
+            WindowEvent::KeyboardInput { input, .. } => {
+                self.renderer
+                    .as_mut()
+                    .map(|renderer| renderer.keyboard_input_hook(input));
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                self.renderer
+                    .as_mut()
+                    .map(|renderer| renderer.cursor_move_hook(position));
+            }
+            WindowEvent::CursorEntered { .. } => {
+                self.renderer
+                    .as_mut()
+                    .map(|renderer| renderer.cursor_enter_hook());
+            }
+            WindowEvent::CursorLeft { .. } => {
+                self.renderer
+                    .as_mut()
+                    .map(|renderer| renderer.cursor_left_hook());
             }
             _ => (),
         }
