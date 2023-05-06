@@ -10,7 +10,7 @@ fn main() {
 
     Registry::new(
         Api::Gles2,
-        (3, 0),
+        (3, 2),
         gl_generator::Profile::Core,
         gl_generator::Fallbacks::All,
         [],
