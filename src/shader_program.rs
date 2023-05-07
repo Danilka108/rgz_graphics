@@ -1,6 +1,6 @@
 use std::ffi::CString;
 
-use crate::{array::Location, error::GlError, ShaderKind};
+use crate::{array::AttribLocation, error::GlError, ShaderKind};
 
 pub(crate) struct ShaderProgramBuilder<V, G, F> {
     vertex_shader: V,
@@ -22,12 +22,12 @@ impl ShaderProgramBuilder<None, None, None> {
     }
 }
 
-impl<'source_code, G, F> ShaderProgramBuilder<None, G, F> {
-    pub fn vertex_shader(
-        self,
-        source_code: &'source_code [u8],
-    ) -> ShaderProgramBuilder<&'source_code [u8], G, F> {
-        assert_eq!(source_code.last(), Some(&b'\0'));
+impl<G, F> ShaderProgramBuilder<None, G, F> {
+    pub fn vertex_shader(self, source_code: &[u8]) -> ShaderProgramBuilder<Vec<u8>, G, F> {
+        let mut source_code = Vec::from(source_code);
+        if !matches!(source_code.last(), Some(&b'\0')) {
+            source_code.push(b'\0');
+        }
 
         ShaderProgramBuilder {
             vertex_shader: source_code,
@@ -38,12 +38,12 @@ impl<'source_code, G, F> ShaderProgramBuilder<None, G, F> {
     }
 }
 
-impl<'source_code, V, F> ShaderProgramBuilder<V, None, F> {
-    pub fn geometry_shader(
-        self,
-        source_code: &'source_code [u8],
-    ) -> ShaderProgramBuilder<V, &'source_code [u8], F> {
-        assert_eq!(source_code.last(), Some(&b'\0'));
+impl<V, F> ShaderProgramBuilder<V, None, F> {
+    pub fn geometry_shader(self, source_code: &[u8]) -> ShaderProgramBuilder<V, Vec<u8>, F> {
+        let mut source_code = Vec::from(source_code);
+        if !matches!(source_code.last(), Some(&b'\0')) {
+            source_code.push(b'\0');
+        }
 
         ShaderProgramBuilder {
             vertex_shader: self.vertex_shader,
@@ -54,12 +54,12 @@ impl<'source_code, V, F> ShaderProgramBuilder<V, None, F> {
     }
 }
 
-impl<'source_code, V, G> ShaderProgramBuilder<V, G, None> {
-    pub fn fragment_shader(
-        self,
-        source_code: &'source_code [u8],
-    ) -> ShaderProgramBuilder<V, G, &'source_code [u8]> {
-        assert_eq!(source_code.last(), Some(&b'\0'));
+impl<V, G> ShaderProgramBuilder<V, G, None> {
+    pub fn fragment_shader(self, source_code: &[u8]) -> ShaderProgramBuilder<V, G, Vec<u8>> {
+        let mut source_code = Vec::from(source_code);
+        if !matches!(source_code.last(), Some(&b'\0')) {
+            source_code.push(b'\0');
+        }
 
         ShaderProgramBuilder {
             vertex_shader: self.vertex_shader,
@@ -70,7 +70,7 @@ impl<'source_code, V, G> ShaderProgramBuilder<V, G, None> {
     }
 }
 
-impl<'vertex, 'fragment> ShaderProgramBuilder<&'vertex [u8], None, &'fragment [u8]> {
+impl ShaderProgramBuilder<Vec<u8>, None, Vec<u8>> {
     pub fn build(self) -> Result<ShaderProgram, GlError> {
         unsafe {
             let vertex_shader_id =
@@ -96,9 +96,7 @@ impl<'vertex, 'fragment> ShaderProgramBuilder<&'vertex [u8], None, &'fragment [u
     }
 }
 
-impl<'gl, 'vertex, 'geometry, 'fragment>
-    ShaderProgramBuilder<&'vertex [u8], &'geometry [u8], &'fragment [u8]>
-{
+impl ShaderProgramBuilder<Vec<u8>, Vec<u8>, Vec<u8>> {
     pub fn build(self) -> Result<ShaderProgram, GlError> {
         unsafe {
             let vertex_shader_id =
@@ -183,7 +181,7 @@ unsafe fn check_linking_error(gl: &gl::Gl, program_id: gl::types::GLuint) -> Res
     })
 }
 
-unsafe fn get_log(gl: &gl::Gl, id: gl::types::GLuint) -> String {
+pub unsafe fn get_log(gl: &gl::Gl, id: gl::types::GLuint) -> String {
     let mut log_len = 0;
     gl.GetShaderiv(id, gl::INFO_LOG_LENGTH, &mut log_len);
 
@@ -214,18 +212,23 @@ impl ShaderProgram {
         }
     }
 
-    pub fn get_location_of(&self, name: &str) -> Location {
+    pub fn id(&self) -> gl::types::GLuint {
+        self.id
+    }
+
+    pub fn attrib_location_of(&self, name: &str) -> AttribLocation {
         let name = CString::new(name).unwrap();
 
         let id = unsafe { self.gl.GetAttribLocation(self.id, name.as_ptr()) };
-        Location::new(id as gl::types::GLuint)
+        AttribLocation::new(id as gl::types::GLuint)
     }
 
     pub fn set_uniform_bool(&self, name: &str, value: bool) {
         let name = CString::new(name).unwrap();
 
         unsafe {
-            self.gl.Uniform1i(
+            self.gl.ProgramUniform1i(
+                self.id,
                 self.gl.GetUniformLocation(self.id, name.as_ptr()),
                 value.into(),
             );
@@ -236,8 +239,23 @@ impl ShaderProgram {
         let name = CString::new(name).unwrap();
 
         unsafe {
-            self.gl
-                .Uniform1i(self.gl.GetUniformLocation(self.id, name.as_ptr()), value);
+            self.gl.ProgramUniform1i(
+                self.id,
+                self.gl.GetUniformLocation(self.id, name.as_ptr()),
+                value,
+            );
+        }
+    }
+
+    pub fn set_uniform_u32(&self, name: &str, value: u32) {
+        let name = CString::new(name).unwrap();
+
+        unsafe {
+            self.gl.ProgramUniform1ui(
+                self.id,
+                self.gl.GetUniformLocation(self.id, name.as_ptr()),
+                value,
+            );
         }
     }
 
@@ -245,8 +263,11 @@ impl ShaderProgram {
         let name = CString::new(name).unwrap();
 
         unsafe {
-            self.gl
-                .Uniform1f(self.gl.GetUniformLocation(self.id, name.as_ptr()), value);
+            self.gl.ProgramUniform1f(
+                self.id,
+                self.gl.GetUniformLocation(self.id, name.as_ptr()),
+                value,
+            );
         }
     }
 
@@ -254,7 +275,8 @@ impl ShaderProgram {
         let name = CString::new(name).unwrap();
 
         unsafe {
-            self.gl.Uniform2fv(
+            self.gl.ProgramUniform2fv(
+                self.id,
                 self.gl.GetUniformLocation(self.id, name.as_ptr()),
                 1,
                 value.as_ptr(),
@@ -266,7 +288,8 @@ impl ShaderProgram {
         let name = CString::new(name).unwrap();
 
         unsafe {
-            self.gl.Uniform3fv(
+            self.gl.ProgramUniform3fv(
+                self.id,
                 self.gl.GetUniformLocation(self.id, name.as_ptr()),
                 1,
                 value.as_ptr(),
@@ -278,7 +301,8 @@ impl ShaderProgram {
         let name = CString::new(name).unwrap();
 
         unsafe {
-            self.gl.Uniform4fv(
+            self.gl.ProgramUniform4fv(
+                self.id,
                 self.gl.GetUniformLocation(self.id, name.as_ptr()),
                 1,
                 value.as_ptr(),
@@ -290,7 +314,8 @@ impl ShaderProgram {
         let name = CString::new(name).unwrap();
 
         unsafe {
-            self.gl.UniformMatrix2fv(
+            self.gl.ProgramUniformMatrix2fv(
+                self.id,
                 self.gl.GetUniformLocation(self.id, name.as_ptr()),
                 1,
                 gl::FALSE,
@@ -303,7 +328,8 @@ impl ShaderProgram {
         let name = CString::new(name).unwrap();
 
         unsafe {
-            self.gl.UniformMatrix3fv(
+            self.gl.ProgramUniformMatrix3fv(
+                self.id,
                 self.gl.GetUniformLocation(self.id, name.as_ptr()),
                 1,
                 gl::FALSE,
@@ -316,7 +342,8 @@ impl ShaderProgram {
         let name = CString::new(name).unwrap();
 
         unsafe {
-            self.gl.UniformMatrix4fv(
+            self.gl.ProgramUniformMatrix4fv(
+                self.id,
                 self.gl.GetUniformLocation(self.id, name.as_ptr()),
                 1,
                 gl::FALSE,

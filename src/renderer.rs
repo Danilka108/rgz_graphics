@@ -7,69 +7,22 @@ use winit::{
 };
 
 use crate::{
-    array::{Array, AttribPointer, Size},
+    array::{AttribPointer, Size, VerticesArray},
     shader_program::{ShaderProgram, ShaderProgramBuilder},
 };
 
 pub(crate) struct RgzRenderer {
     gl: gl::Gl,
-    array: Array,
-    program: ShaderProgram,
+    steps_count: u32,
+    radius: f32,
+    vertices_array: VerticesArray,
+    mesh_program: ShaderProgram,
     left_mouse_btn_pressed: bool,
     last_cursor_pos: Option<PhysicalPosition<f64>>,
-    polar_angle: f32,
-    azimuthal_angle: f32,
+
+    camera_polar_angle: f32,
+    camera_azimuthal_angle: f32,
 }
-
-fn generate_vertices(iters_count: isize) -> Vec<f32> {
-    let inclination_step = 180.0 / (iters_count as f32);
-    let azimuth_step = 360.0 / (iters_count as f32);
-
-    let radius = 1f32;
-    let x_center = 0.0;
-    let y_center = 0.0;
-    let z_center = 0.0;
-
-    let mut vertex_data = Vec::new();
-
-    for angle_i in 0..iters_count {
-        for height_i in 0..(iters_count + 1) {
-            let angle = angle_i as f32 * 360.0 / (iters_count as f32);
-            let height = (height_i - iters_count / 2) as f32 * 2.0 * radius / (iters_count as f32);
-
-            vertex_data.push(radius * angle.cos());
-            vertex_data.push(radius * angle.sin());
-            vertex_data.push(height);
-        }
-    }
-
-    // for inclination_index in 0..(iters_count + 1) {
-    //     for azimuth_index in 0..(iters_count + 1) {
-    //         let inclination = inclination_index as f32 * inclination_step;
-    //         let azimuth = azimuth_index as f32 * azimuth_step;
-    //
-    //         dbg!(inclination, azimuth);
-    //         let x_initial = radius * inclination.sin() * azimuth.cos();
-    //         let y_initial = radius * inclination.sin() * azimuth.sin();
-    //         let z_initial = radius * inclination.cos();
-    //
-    //         // let x_deformed = x_center + x_initial;
-    //         // let y_deformed = y_center + y_initial;
-    //         // let z_deformed = z_center + z_initial - radius * (latitude / 90.0).powi(3);
-    //         let x_deformed = x_center + x_initial;
-    //         let y_deformed = y_center + y_initial;
-    //         let z_deformed = z_center + z_initial;
-    //
-    //         vertex_data.push(x_deformed);
-    //         vertex_data.push(y_deformed);
-    //         vertex_data.push(z_deformed);
-    //     }
-    // }
-
-    vertex_data
-}
-
-const S: isize = 100;
 
 impl Renderer for RgzRenderer {
     fn new<D>(gl_display: &D) -> Self
@@ -81,50 +34,59 @@ impl Renderer for RgzRenderer {
             gl_display.get_proc_address(symbol.as_c_str()).cast()
         });
 
-        let vertex_shader = {
-            let mut source_code = Vec::new();
-            source_code.extend_from_slice(include_bytes!("vertex_shader.glsl"));
-            source_code.push(b'\0');
-            source_code
-        };
+        let iters_count = 100;
+        let radius = 1f32;
 
-        let fragment_shader = {
-            let mut source_code = Vec::new();
-            source_code.extend_from_slice(include_bytes!("fragment_shader.glsl"));
-            source_code.push(b'\0');
-            source_code
-        };
+        let mut angles_indices = Vec::new();
 
-        let program = ShaderProgramBuilder::new(gl.clone())
-            .vertex_shader(&vertex_shader[..])
-            .fragment_shader(&fragment_shader[..])
+        for polar_index in 0..(iters_count) {
+            for azimuth_index in 0..iters_count {
+                angles_indices.push(polar_index);
+                angles_indices.push(azimuth_index);
+            }
+        }
+
+        let mesh_program = ShaderProgramBuilder::new(gl.clone())
+            .vertex_shader(include_bytes!("vertex_shader.glsl"))
+            .geometry_shader(include_bytes!("geometry_shader.glsl"))
+            .fragment_shader(include_bytes!("fragment_shader.glsl"))
             .build()
             .unwrap();
 
-        program.use_program();
+        mesh_program.use_program();
 
-        let v = generate_vertices(S);
-        let array = Array::new(gl.clone(), v);
-        array.use_array();
+        let vertices_array = VerticesArray::new(gl.clone(), angles_indices);
+        vertices_array.use_array();
 
-        array.set_attrib_pointer(
-            program.get_location_of("pointPos"),
+        vertices_array.set_attrib_int_pointer(
+            mesh_program.attrib_location_of("iPolarAngleIndex"),
             AttribPointer {
-                size: Size::Three,
-                stride: 0,
+                size: Size::One,
+                stride: 2 * std::mem::size_of::<u32>(),
                 offset: 0,
-                ty: gl::FLOAT,
+                ty: gl::UNSIGNED_INT,
+            },
+        );
+        vertices_array.set_attrib_int_pointer(
+            mesh_program.attrib_location_of("iAzimuthAngleIndex"),
+            AttribPointer {
+                size: Size::One,
+                stride: 2 * std::mem::size_of::<u32>(),
+                offset: std::mem::size_of::<u32>(),
+                ty: gl::UNSIGNED_INT,
             },
         );
 
         Self {
             gl,
-            array,
-            program,
+            radius,
+            steps_count: iters_count,
+            vertices_array,
+            mesh_program,
             left_mouse_btn_pressed: false,
             last_cursor_pos: None,
-            polar_angle: 0.0,
-            azimuthal_angle: 0.0,
+            camera_polar_angle: 0.0,
+            camera_azimuthal_angle: 0.0,
         }
     }
 
@@ -151,27 +113,35 @@ impl Renderer for RgzRenderer {
 
     fn draw(&mut self) {
         unsafe {
+            self.gl.Enable(gl::DEPTH_TEST);
             self.gl.ClearColor(0.0, 0.0, 0.0, 1.0);
-            self.gl.Clear(gl::COLOR_BUFFER_BIT);
+            self.gl.Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
-        self.program.use_program();
+        self.mesh_program.use_program();
 
-        let camera_pos_matrix =
-            Mat4::from_rotation_x(self.polar_angle) * Mat4::from_rotation_y(self.azimuthal_angle);
+        let camera_pos_matrix = Mat4::from_rotation_x(self.camera_polar_angle)
+            * Mat4::from_rotation_y(self.camera_azimuthal_angle);
+        let scale_matrix = Mat4::from_scale(Vec3::new(0.4, 0.4, 0.4));
 
-        self.program
+        self.mesh_program
             .set_uniform_mat4("uCameraPos", camera_pos_matrix.to_cols_array());
+        self.mesh_program
+            .set_uniform_mat4("uScale", scale_matrix.to_cols_array());
 
-        self.program.set_uniform_mat4(
-            "uScale",
-            Mat4::from_scale(Vec3::new(0.4, 0.4, 0.4)).to_cols_array(),
-        );
+        self.mesh_program.set_uniform_f32("uRadius", self.radius);
+        self.mesh_program
+            .set_uniform_u32("uStepsCount", self.steps_count);
 
-        self.array.use_array();
+        self.vertices_array.use_array();
 
         unsafe {
-            self.gl.DrawArrays(gl::POINTS, 0, (S * S) as i32);
+            self.gl
+                .DrawArrays(gl::POINTS, 0, self.vertices_array.len() as i32);
+            // let log = get_log(&self.gl, self.mesh_program.id());
+            // if log.len() != 0 {
+            //     dbg!(log);
+            // }
         }
     }
 
@@ -201,7 +171,7 @@ impl RgzRenderer {
         let delta_polar_angle = delta_y as f32 * Self::DELTA_Y_INTO_DELTA_ANGLE_FACTOR;
         let delta_azimuthal_angle = delta_x as f32 * Self::DELTA_X_INTO_DELTA_ANGLE_FACTOR;
 
-        let polar_angle = self.polar_angle + delta_polar_angle;
+        let polar_angle = self.camera_polar_angle + delta_polar_angle;
         let polar_angle = if polar_angle > std::f32::consts::FRAC_PI_2 {
             std::f32::consts::FRAC_PI_2
         } else if polar_angle < -std::f32::consts::FRAC_PI_2 {
@@ -211,9 +181,9 @@ impl RgzRenderer {
         };
 
         let azimuthal_angle =
-            (self.azimuthal_angle + delta_azimuthal_angle) % (std::f32::consts::PI * 2.0);
+            (self.camera_azimuthal_angle + delta_azimuthal_angle) % (std::f32::consts::PI * 2.0);
 
-        self.polar_angle = polar_angle;
-        self.azimuthal_angle = azimuthal_angle;
+        self.camera_polar_angle = polar_angle;
+        self.camera_azimuthal_angle = azimuthal_angle;
     }
 }

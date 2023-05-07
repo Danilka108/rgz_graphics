@@ -1,10 +1,12 @@
 #version 330 core
 
-in vec3 pointPos;
+in uint iPolarAngleIndex;
+in uint iAzimuthAngleIndex;
 
-uniform mat4 uScale;
-uniform mat4 uCameraPos;
+out uint PolarAngleIndex;
+out uint AzimuthAngleIndex;
 
 void main() {
-  gl_Position = uCameraPos * uScale * vec4(pointPos, 1.0);
+  PolarAngleIndex = iPolarAngleIndex;
+  AzimuthAngleIndex = iAzimuthAngleIndex;
 }

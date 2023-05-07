@@ -2,10 +2,10 @@ use gl_window_provider::GlWindowProvider;
 use renderer::RgzRenderer;
 use winit::event_loop::EventLoop;
 
-mod array;
 mod error;
 mod renderer;
 mod shader_program;
+mod array;
 
 #[derive(Debug)]
 pub enum ShaderKind {
