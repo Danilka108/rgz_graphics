@@ -9,3 +9,4 @@ winit = "0.28.4"
 glutin = "0.30.7"
 gl_window_provider = { path="gl_window_provider" }
 glam = "0.24.0"
+image = "0.24.6"

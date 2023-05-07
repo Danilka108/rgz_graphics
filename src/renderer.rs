@@ -13,13 +13,13 @@ use crate::{
 
 pub(crate) struct RgzRenderer {
     gl: gl::Gl,
-    steps_count: u32,
-    radius: f32,
+    figure_slices_count: u32,
+    figure_radius: f32,
     vertices_array: VerticesArray,
     mesh_program: ShaderProgram,
+    polygon_program: ShaderProgram,
     left_mouse_btn_pressed: bool,
     last_cursor_pos: Option<PhysicalPosition<f64>>,
-
     camera_polar_angle: f32,
     camera_azimuthal_angle: f32,
 }
@@ -34,26 +34,34 @@ impl Renderer for RgzRenderer {
             gl_display.get_proc_address(symbol.as_c_str()).cast()
         });
 
-        let iters_count = 100;
+        let figure_slices_count = 100;
         let radius = 1f32;
 
         let mut angles_indices = Vec::new();
 
-        for polar_index in 0..(iters_count) {
-            for azimuth_index in 0..iters_count {
+        for polar_index in 0..(figure_slices_count) {
+            for azimuth_index in 0..figure_slices_count {
                 angles_indices.push(polar_index);
                 angles_indices.push(azimuth_index);
             }
         }
 
         let mesh_program = ShaderProgramBuilder::new(gl.clone())
-            .vertex_shader(include_bytes!("vertex_shader.glsl"))
-            .geometry_shader(include_bytes!("geometry_shader.glsl"))
-            .fragment_shader(include_bytes!("fragment_shader.glsl"))
+            .vertex_shader(include_bytes!("mesh_program/vertex_shader.glsl"))
+            .geometry_shader(include_bytes!("mesh_program/geometry_shader.glsl"))
+            .fragment_shader(include_bytes!("mesh_program/fragment_shader.glsl"))
+            .build()
+            .unwrap();
+
+        let polygon_program = ShaderProgramBuilder::new(gl.clone())
+            .vertex_shader(include_bytes!("polygon_program/vertex_shader.glsl"))
+            .geometry_shader(include_bytes!("polygon_program/geometry_shader.glsl"))
+            .fragment_shader(include_bytes!("polygon_program/fragment_shader.glsl"))
             .build()
             .unwrap();
 
         mesh_program.use_program();
+        polygon_program.use_program();
 
         let vertices_array = VerticesArray::new(gl.clone(), angles_indices);
         vertices_array.use_array();
@@ -79,10 +87,11 @@ impl Renderer for RgzRenderer {
 
         Self {
             gl,
-            radius,
-            steps_count: iters_count,
+            figure_radius: radius,
+            figure_slices_count,
             vertices_array,
             mesh_program,
+            polygon_program,
             left_mouse_btn_pressed: false,
             last_cursor_pos: None,
             camera_polar_angle: 0.0,
@@ -112,36 +121,46 @@ impl Renderer for RgzRenderer {
     // fn cursor_left_hook(&mut self) {}
 
     fn draw(&mut self) {
+        let camera_pos_matrix = Mat4::from_rotation_x(self.camera_polar_angle)
+            * Mat4::from_rotation_y(self.camera_azimuthal_angle);
+        let scale_matrix = Mat4::from_scale(Vec3::new(0.4, 0.4, 0.4));
+
         unsafe {
             self.gl.Enable(gl::DEPTH_TEST);
             self.gl.ClearColor(0.0, 0.0, 0.0, 1.0);
             self.gl.Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
+        self.vertices_array.use_array();
+
         self.mesh_program.use_program();
-
-        let camera_pos_matrix = Mat4::from_rotation_x(self.camera_polar_angle)
-            * Mat4::from_rotation_y(self.camera_azimuthal_angle);
-        let scale_matrix = Mat4::from_scale(Vec3::new(0.4, 0.4, 0.4));
-
         self.mesh_program
             .set_uniform_mat4("uCameraPos", camera_pos_matrix.to_cols_array());
         self.mesh_program
             .set_uniform_mat4("uScale", scale_matrix.to_cols_array());
-
-        self.mesh_program.set_uniform_f32("uRadius", self.radius);
         self.mesh_program
-            .set_uniform_u32("uStepsCount", self.steps_count);
+            .set_uniform_f32("uRadius", self.figure_radius);
+        self.mesh_program
+            .set_uniform_u32("uStepsCount", self.figure_slices_count);
 
-        self.vertices_array.use_array();
+        unsafe {
+            // self.gl
+            //     .DrawArrays(gl::POINTS, 0, self.vertices_array.len() as i32);
+        }
+
+        self.polygon_program.use_program();
+        self.polygon_program
+            .set_uniform_mat4("uCameraPos", camera_pos_matrix.to_cols_array());
+        self.polygon_program
+            .set_uniform_mat4("uScale", scale_matrix.to_cols_array());
+        self.polygon_program
+            .set_uniform_f32("uRadius", self.figure_radius);
+        self.polygon_program
+            .set_uniform_u32("uStepsCount", self.figure_slices_count);
 
         unsafe {
             self.gl
                 .DrawArrays(gl::POINTS, 0, self.vertices_array.len() as i32);
-            // let log = get_log(&self.gl, self.mesh_program.id());
-            // if log.len() != 0 {
-            //     dbg!(log);
-            // }
         }
     }
 
