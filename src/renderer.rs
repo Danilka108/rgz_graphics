@@ -133,6 +133,34 @@ impl Renderer for RgzRenderer {
 
         self.vertices_array.use_array();
 
+        self.polygon_program.use_program();
+        self.polygon_program
+            .set_uniform_vec3("DirLight.direction", [1.0, 0.0, 0.0]);
+        self.polygon_program
+            .set_uniform_vec3("DirLight.ambient", [0.0, 0.3, 0.0]);
+        self.polygon_program
+            .set_uniform_vec3("DirLight.diffuse", [0.0, 0.3, 0.0]);
+        self.polygon_program
+            .set_uniform_vec3("DirLight.specular", [0.0, 0.3, 0.0]);
+
+        let view_pos = self.calc_view_pos();
+        self.polygon_program
+            .set_uniform_vec3("ViewPos", [view_pos.0, view_pos.1, view_pos.2]);
+
+        self.polygon_program
+            .set_uniform_mat4("uCamera", camera_pos_matrix.to_cols_array());
+        self.polygon_program
+            .set_uniform_mat4("uScale", scale_matrix.to_cols_array());
+        self.polygon_program
+            .set_uniform_f32("uRadius", self.figure_radius);
+        self.polygon_program
+            .set_uniform_u32("uSlicesCount", self.figure_slices_count);
+
+        unsafe {
+            self.gl
+                .DrawArrays(gl::POINTS, 0, self.vertices_array.len() as i32);
+        }
+
         self.mesh_program.use_program();
         self.mesh_program
             .set_uniform_mat4("uCameraPos", camera_pos_matrix.to_cols_array());
@@ -143,25 +171,10 @@ impl Renderer for RgzRenderer {
         self.mesh_program
             .set_uniform_u32("uStepsCount", self.figure_slices_count);
 
-        unsafe {
-            // self.gl
-            //     .DrawArrays(gl::POINTS, 0, self.vertices_array.len() as i32);
-        }
-
-        self.polygon_program.use_program();
-        self.polygon_program
-            .set_uniform_mat4("uCameraPos", camera_pos_matrix.to_cols_array());
-        self.polygon_program
-            .set_uniform_mat4("uScale", scale_matrix.to_cols_array());
-        self.polygon_program
-            .set_uniform_f32("uRadius", self.figure_radius);
-        self.polygon_program
-            .set_uniform_u32("uStepsCount", self.figure_slices_count);
-
-        unsafe {
-            self.gl
-                .DrawArrays(gl::POINTS, 0, self.vertices_array.len() as i32);
-        }
+        // unsafe {
+        //     self.gl
+        //         .DrawArrays(gl::POINTS, 0, self.vertices_array.len() as i32);
+        // }
     }
 
     fn resize(&mut self, width: i32, height: i32) {
@@ -174,6 +187,16 @@ impl Renderer for RgzRenderer {
 impl RgzRenderer {
     const DELTA_X_INTO_DELTA_ANGLE_FACTOR: f32 = std::f32::consts::FRAC_PI_2 / (1920.0 / 2.0);
     const DELTA_Y_INTO_DELTA_ANGLE_FACTOR: f32 = std::f32::consts::FRAC_PI_2 / (1280.0 / 2.0);
+
+    fn calc_view_pos(&self) -> (f32, f32, f32) {
+        let radius = 1.0;
+
+        let x = radius * self.camera_polar_angle.sin() * self.camera_azimuthal_angle.cos();
+        let y = radius * self.camera_polar_angle.sin() * self.camera_azimuthal_angle.sin();
+        let z = radius * self.camera_polar_angle.cos();
+
+        (x, y, z)
+    }
 
     fn update_rotation_angles(
         &mut self,
