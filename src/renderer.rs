@@ -200,12 +200,14 @@ impl Renderer for RgzRenderer {
 
     fn draw(&mut self) {
         let view_matrix = Mat4::from_rotation_x(self.camera_polar_angle)
-            * Mat4::from_rotation_y(self.camera_azimuthal_angle);
-        let model_matrix = Mat4::from_scale(Vec3::new(
-            self.camera_zoom.exp(),
-            self.camera_zoom.exp(),
-            self.camera_zoom.exp(),
-        ));
+            * Mat4::from_rotation_y(self.camera_azimuthal_angle)
+            * Mat4::from_scale(Vec3::new(
+                self.camera_zoom.exp(),
+                self.camera_zoom.exp(),
+                self.camera_zoom.exp(),
+            ));
+
+        let model_matrix = Mat4::IDENTITY;
 
         unsafe {
             self.gl.Enable(gl::DEPTH_TEST);
@@ -217,13 +219,28 @@ impl Renderer for RgzRenderer {
 
         self.polygon_program.use_program();
         self.polygon_program
-            .set_uniform_vec3("uDirLight.direction", [1.0, 0.0, 0.0]);
+            .set_uniform_vec3("uDirLight.direction", [0.0, 1.0, 0.0]);
         self.polygon_program
-            .set_uniform_vec3("uDirLight.ambient", [0.0, 0.3, 0.0]);
+            .set_uniform_vec3("uDirLight.ambient", [0.1, 0.1, 0.1]);
         self.polygon_program
-            .set_uniform_vec3("uDirLight.diffuse", [0.0, 0.3, 0.0]);
+            .set_uniform_vec3("uDirLight.diffuse", [0.2, 0.2, 0.2]);
         self.polygon_program
-            .set_uniform_vec3("uDirLight.specular", [0.0, 0.3, 0.0]);
+            .set_uniform_vec3("uDirLight.specular", [0.4, 0.4, 0.4]);
+
+        self.polygon_program
+            .set_uniform_vec3("uPointLight.position", [1.0, 1.0, 1.0]);
+        self.polygon_program
+            .set_uniform_vec3("uPointLight.ambient", [0.1, 0.1, 0.1]);
+        self.polygon_program
+            .set_uniform_vec3("uPointLight.diffuse", [0.4, 0.4, 0.4]);
+        self.polygon_program
+            .set_uniform_vec3("uPointLight.specular", [0.5, 0.5, 0.5]);
+        self.polygon_program
+            .set_uniform_f32("uPointLight.constant", 1.0);
+        self.polygon_program
+            .set_uniform_f32("uPointLight.linear", 0.09);
+        self.polygon_program
+            .set_uniform_f32("uPointLight.quadratic", 0.032);
 
         // emerald material
         self.polygon_program
@@ -266,8 +283,8 @@ impl Renderer for RgzRenderer {
             .set_uniform_u32("uSlicesCount", self.mesh_slices_count);
 
         unsafe {
-            self.gl
-                .DrawArrays(gl::POINTS, 0, self.mesh_array.len() as i32);
+            // self.gl
+            //     .DrawArrays(gl::POINTS, 0, self.mesh_array.len() as i32);
         }
     }
 
