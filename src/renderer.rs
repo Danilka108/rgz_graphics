@@ -3,7 +3,7 @@ use glam::{Mat4, Vec3};
 use std::ffi::CString;
 use winit::{
     dpi::PhysicalPosition,
-    event::{ElementState, MouseButton},
+    event::{ElementState, MouseButton, MouseScrollDelta, TouchPhase},
 };
 
 use crate::{
@@ -30,12 +30,21 @@ pub(crate) struct RgzRenderer {
 
     camera_polar_angle: f32,
     camera_azimuthal_angle: f32,
+    camera_zoom: f32,
 }
 
 impl RgzRenderer {
     const POLYGON_SLICES_COUNT: u32 = 1000;
     const MESH_SLICES_COUNT: u32 = 100;
     const FIGURE_RADIUS: f32 = 1.0;
+
+    const ZOOM_FACTOR: f32 = 1.0 / 25.0;
+    const ZOOM_MIN: f32 = -0.02;
+    const ZOOM_DEFAULT: f32 = -0.5;
+    const ZOOM_MAX: f32 = -3.00;
+
+    const DELTA_X_INTO_DELTA_ANGLE_FACTOR: f32 = std::f32::consts::FRAC_PI_2 / (1920.0 / 2.0);
+    const DELTA_Y_INTO_DELTA_ANGLE_FACTOR: f32 = std::f32::consts::FRAC_PI_2 / (1280.0 / 2.0);
 }
 
 impl Renderer for RgzRenderer {
@@ -149,6 +158,7 @@ impl Renderer for RgzRenderer {
 
             camera_polar_angle: 0.0,
             camera_azimuthal_angle: 0.0,
+            camera_zoom: Self::ZOOM_DEFAULT,
         }
     }
 
@@ -157,7 +167,18 @@ impl Renderer for RgzRenderer {
             matches!(state, ElementState::Pressed) && matches!(button, MouseButton::Left);
     }
 
-    // fn mouse_wheel_hook(&mut self, delta: MouseScrollDelta, phase: TouchPhase) {}
+    fn mouse_wheel_hook(&mut self, delta: MouseScrollDelta, phase: TouchPhase) {
+        let MouseScrollDelta::LineDelta(_, vertical_delta) = delta else {
+            return;
+        };
+
+        let TouchPhase::Moved = phase else {
+            return;
+        };
+
+        self.camera_zoom = (self.camera_zoom + vertical_delta * Self::ZOOM_FACTOR)
+            .clamp(Self::ZOOM_MAX, Self::ZOOM_MIN);
+    }
 
     // fn keyboard_input_hook(&mut self, input: KeyboardInput) {}
 
@@ -180,7 +201,11 @@ impl Renderer for RgzRenderer {
     fn draw(&mut self) {
         let view_matrix = Mat4::from_rotation_x(self.camera_polar_angle)
             * Mat4::from_rotation_y(self.camera_azimuthal_angle);
-        let model_matrix = Mat4::from_scale(Vec3::new(0.4, 0.4, 0.4));
+        let model_matrix = Mat4::from_scale(Vec3::new(
+            self.camera_zoom.exp(),
+            self.camera_zoom.exp(),
+            self.camera_zoom.exp(),
+        ));
 
         unsafe {
             self.gl.Enable(gl::DEPTH_TEST);
@@ -254,9 +279,6 @@ impl Renderer for RgzRenderer {
 }
 
 impl RgzRenderer {
-    const DELTA_X_INTO_DELTA_ANGLE_FACTOR: f32 = std::f32::consts::FRAC_PI_2 / (1920.0 / 2.0);
-    const DELTA_Y_INTO_DELTA_ANGLE_FACTOR: f32 = std::f32::consts::FRAC_PI_2 / (1280.0 / 2.0);
-
     fn calc_view_pos(&self) -> (f32, f32, f32) {
         let radius = 1.0;
 
