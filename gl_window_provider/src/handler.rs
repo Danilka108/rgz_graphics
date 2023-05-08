@@ -157,7 +157,10 @@ where
             return;
         };
 
-        self.renderer.as_mut().unwrap().draw();
+        self.renderer
+            .as_mut()
+            .unwrap()
+            .draw(gl_surface.width(), gl_surface.height());
 
         window.request_redraw();
         gl_surface.swap_buffers(gl_context).unwrap();

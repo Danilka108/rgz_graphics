@@ -1,5 +1,5 @@
 use gl_window_provider::Renderer;
-use glam::{Mat4, Vec3};
+use glam::{Mat4, Vec3, Vec4};
 use std::ffi::CString;
 use winit::{
     dpi::PhysicalPosition,
@@ -38,13 +38,16 @@ impl RgzRenderer {
     const MESH_SLICES_COUNT: u32 = 100;
     const FIGURE_RADIUS: f32 = 1.0;
 
-    const ZOOM_FACTOR: f32 = 1.0 / 25.0;
-    const ZOOM_MIN: f32 = -0.02;
-    const ZOOM_DEFAULT: f32 = -0.5;
-    const ZOOM_MAX: f32 = -3.00;
+    const ZOOM_FACTOR: f32 = 1.0 / 10.0;
+    const ZOOM_MIN: f32 = -20.0;
+    const ZOOM_DEFAULT: f32 = -4.5;
+    const ZOOM_MAX: f32 = -2.0;
 
     const DELTA_X_INTO_DELTA_ANGLE_FACTOR: f32 = std::f32::consts::FRAC_PI_2 / (1920.0 / 2.0);
     const DELTA_Y_INTO_DELTA_ANGLE_FACTOR: f32 = std::f32::consts::FRAC_PI_2 / (1280.0 / 2.0);
+
+    const POLAR_ANGLE_MAX: f32 = std::f32::consts::FRAC_PI_2 * 0.9;
+    const POLAR_ANGLE_MIN: f32 = -Self::POLAR_ANGLE_MAX;
 }
 
 impl Renderer for RgzRenderer {
@@ -177,7 +180,7 @@ impl Renderer for RgzRenderer {
         };
 
         self.camera_zoom = (self.camera_zoom + vertical_delta * Self::ZOOM_FACTOR)
-            .clamp(Self::ZOOM_MAX, Self::ZOOM_MIN);
+            .clamp(Self::ZOOM_MIN, Self::ZOOM_MAX);
     }
 
     // fn keyboard_input_hook(&mut self, input: KeyboardInput) {}
@@ -198,16 +201,24 @@ impl Renderer for RgzRenderer {
         self.cursor_left = true;
     }
 
-    fn draw(&mut self) {
-        let view_matrix = Mat4::from_rotation_x(self.camera_polar_angle)
-            * Mat4::from_rotation_y(self.camera_azimuthal_angle)
-            * Mat4::from_scale(Vec3::new(
-                self.camera_zoom.exp(),
-                self.camera_zoom.exp(),
-                self.camera_zoom.exp(),
-            ));
+    fn draw(&mut self, width: Option<u32>, height: Option<u32>) {
+        let Some(width) = width else {
+            return;
+        };
 
+        let Some(height) = height else {
+            return;
+        };
+
+        let view_matrix = self.calc_look_at_matrix();
+        // let model_matrix = Mat4::from_rotation_z(std::f32::consts::FRAC_PI_4);
         let model_matrix = Mat4::IDENTITY;
+        let projection_matrix = Mat4::perspective_lh(
+            std::f32::consts::FRAC_PI_4,
+            width as f32 / height as f32,
+            0.1,
+            100.0,
+        );
 
         unsafe {
             self.gl.Enable(gl::DEPTH_TEST);
@@ -264,6 +275,8 @@ impl Renderer for RgzRenderer {
             .set_uniform_f32("uRadius", self.figure_radius);
         self.polygon_program
             .set_uniform_u32("uSlicesCount", self.polygon_slices_count);
+        self.polygon_program
+            .set_uniform_mat4("uProjectionMat", projection_matrix.to_cols_array());
 
         unsafe {
             self.gl
@@ -281,6 +294,8 @@ impl Renderer for RgzRenderer {
             .set_uniform_f32("uRadius", self.figure_radius);
         self.mesh_program
             .set_uniform_u32("uSlicesCount", self.mesh_slices_count);
+        self.mesh_program
+            .set_uniform_mat4("uProjectionMat", projection_matrix.to_cols_array());
 
         unsafe {
             // self.gl
@@ -296,12 +311,26 @@ impl Renderer for RgzRenderer {
 }
 
 impl RgzRenderer {
-    fn calc_view_pos(&self) -> (f32, f32, f32) {
-        let radius = 1.0;
+    fn calc_look_at_matrix(&self) -> Mat4 {
+        let x =
+            self.camera_zoom * self.camera_polar_angle.cos() * self.camera_azimuthal_angle.sin();
+        let y =
+            self.camera_zoom * self.camera_polar_angle.cos() * self.camera_azimuthal_angle.cos();
+        let z = self.camera_zoom * self.camera_polar_angle.sin();
 
-        let x = radius * self.camera_polar_angle.sin() * self.camera_azimuthal_angle.cos();
-        let y = radius * self.camera_polar_angle.sin() * self.camera_azimuthal_angle.sin();
-        let z = radius * self.camera_polar_angle.cos();
+        Mat4::look_at_lh(
+            Vec3::new(x, z, y),
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(0.0, 1.0, 0.0),
+        )
+    }
+
+    fn calc_view_pos(&self) -> (f32, f32, f32) {
+        let x =
+            self.camera_zoom * self.camera_polar_angle.sin() * self.camera_azimuthal_angle.cos();
+        let y =
+            self.camera_zoom * self.camera_polar_angle.sin() * self.camera_azimuthal_angle.sin();
+        let z = self.camera_zoom * self.camera_polar_angle.cos();
 
         (x, y, z)
     }
@@ -315,17 +344,17 @@ impl RgzRenderer {
             return;
         }
 
-        let delta_x = prev_pos.x - next_pos.x;
+        let delta_x = -prev_pos.x + next_pos.x;
         let delta_y = prev_pos.y - next_pos.y;
 
         let delta_polar_angle = delta_y as f32 * Self::DELTA_Y_INTO_DELTA_ANGLE_FACTOR;
         let delta_azimuthal_angle = delta_x as f32 * Self::DELTA_X_INTO_DELTA_ANGLE_FACTOR;
 
         let polar_angle = self.camera_polar_angle + delta_polar_angle;
-        let polar_angle = if polar_angle > std::f32::consts::FRAC_PI_2 {
-            std::f32::consts::FRAC_PI_2
-        } else if polar_angle < -std::f32::consts::FRAC_PI_2 {
-            -std::f32::consts::FRAC_PI_2
+        let polar_angle = if polar_angle > Self::POLAR_ANGLE_MAX {
+            Self::POLAR_ANGLE_MAX
+        } else if polar_angle < Self::POLAR_ANGLE_MIN {
+            Self::POLAR_ANGLE_MIN
         } else {
             polar_angle
         };

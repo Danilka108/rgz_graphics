@@ -34,7 +34,7 @@ pub trait Renderer {
 
     fn cursor_left_hook(&mut self) {}
 
-    fn draw(&mut self);
+    fn draw(&mut self, width: Option<u32>, height: Option<u32>);
 
     fn resize(&mut self, width: i32, height: i32);
 }

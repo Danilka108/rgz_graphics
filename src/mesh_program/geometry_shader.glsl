@@ -11,6 +11,7 @@ uniform float uRadius;
 
 uniform mat4 uModelMat;
 uniform mat4 uViewMat;
+uniform mat4 uProjectionMat;
 
 vec3 angles_to_pos(uint polarAngleIndex, uint azimuthAngleIndex, uint stepsCount) {
   #define PI 3.1415926538
@@ -33,15 +34,15 @@ vec3 angles_to_pos(uint polarAngleIndex, uint azimuthAngleIndex, uint stepsCount
 }
 
 void main() {
-  gl_Position = uViewMat * uModelMat
+  gl_Position = uProjectionMat * uViewMat * uModelMat
     * vec4(angles_to_pos(PolarAngleIndex[0] + uint(1), AzimuthAngleIndex[0], uSlicesCount), 1.0);
   EmitVertex();
 
-  gl_Position = uViewMat * uModelMat
+  gl_Position = uProjectionMat * uViewMat * uModelMat
     * vec4(angles_to_pos(PolarAngleIndex[0], AzimuthAngleIndex[0], uSlicesCount), 1.0);
   EmitVertex();
 
-  gl_Position = uViewMat * uModelMat
+  gl_Position = uProjectionMat * uViewMat * uModelMat
     * vec4(
       angles_to_pos(PolarAngleIndex[0], (AzimuthAngleIndex[0] + uint(1)) % uSlicesCount, uSlicesCount),
       1.0
