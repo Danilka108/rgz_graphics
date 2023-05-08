@@ -213,12 +213,20 @@ impl Renderer for RgzRenderer {
         let view_matrix = self.calc_look_at_matrix();
         // let model_matrix = Mat4::from_rotation_z(std::f32::consts::FRAC_PI_4);
         let model_matrix = Mat4::IDENTITY;
-        let projection_matrix = Mat4::perspective_lh(
-            std::f32::consts::FRAC_PI_4,
-            width as f32 / height as f32,
-            0.1,
-            100.0,
+        let projection_matrix = Mat4::orthographic_rh(
+            -(width as f32 / 700.0),
+            width as f32 / 700.0,
+            -(height as f32 / 700.0),
+            height as f32 / 700.0,
+            -40.0,
+            40.0,
         );
+        // let projection_matrix = Mat4::perspective_lh(
+        //     std::f32::consts::FRAC_PI_4,
+        //     width as f32 / height as f32,
+        //     0.1,
+        //     100.0,
+        // );
 
         unsafe {
             self.gl.Enable(gl::DEPTH_TEST);
@@ -312,14 +320,10 @@ impl Renderer for RgzRenderer {
 
 impl RgzRenderer {
     fn calc_look_at_matrix(&self) -> Mat4 {
-        let x =
-            self.camera_zoom * self.camera_polar_angle.cos() * self.camera_azimuthal_angle.sin();
-        let y =
-            self.camera_zoom * self.camera_polar_angle.cos() * self.camera_azimuthal_angle.cos();
-        let z = self.camera_zoom * self.camera_polar_angle.sin();
+        let (x, y, z) = self.calc_view_pos();
 
         Mat4::look_at_lh(
-            Vec3::new(x, z, y),
+            Vec3::new(x, y, z),
             Vec3::new(0.0, 0.0, 0.0),
             Vec3::new(0.0, 1.0, 0.0),
         )
@@ -327,10 +331,10 @@ impl RgzRenderer {
 
     fn calc_view_pos(&self) -> (f32, f32, f32) {
         let x =
-            self.camera_zoom * self.camera_polar_angle.sin() * self.camera_azimuthal_angle.cos();
-        let y =
-            self.camera_zoom * self.camera_polar_angle.sin() * self.camera_azimuthal_angle.sin();
-        let z = self.camera_zoom * self.camera_polar_angle.cos();
+            self.camera_zoom * self.camera_polar_angle.cos() * self.camera_azimuthal_angle.sin();
+        let y = self.camera_zoom * self.camera_polar_angle.sin();
+        let z =
+            self.camera_zoom * self.camera_polar_angle.cos() * self.camera_azimuthal_angle.cos();
 
         (x, y, z)
     }
