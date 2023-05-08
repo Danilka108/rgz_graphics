@@ -6,11 +6,11 @@ in uint AzimuthAngleIndex[];
 layout (points) in;
 layout (line_strip, max_vertices = 3) out;
 
-uniform uint uStepsCount;
+uniform uint uSlicesCount;
 uniform float uRadius;
 
-uniform mat4 uScale;
-uniform mat4 uCameraPos;
+uniform mat4 uModelMat;
+uniform mat4 uViewMat;
 
 vec3 angles_to_pos(uint polarAngleIndex, uint azimuthAngleIndex, uint stepsCount) {
   #define PI 3.1415926538
@@ -33,17 +33,17 @@ vec3 angles_to_pos(uint polarAngleIndex, uint azimuthAngleIndex, uint stepsCount
 }
 
 void main() {
-  gl_Position = uCameraPos * uScale
-    * vec4(angles_to_pos(PolarAngleIndex[0] + uint(1), AzimuthAngleIndex[0], uStepsCount), 1.0);
+  gl_Position = uViewMat * uModelMat
+    * vec4(angles_to_pos(PolarAngleIndex[0] + uint(1), AzimuthAngleIndex[0], uSlicesCount), 1.0);
   EmitVertex();
 
-  gl_Position = uCameraPos * uScale
-    * vec4(angles_to_pos(PolarAngleIndex[0], AzimuthAngleIndex[0], uStepsCount), 1.0);
+  gl_Position = uViewMat * uModelMat
+    * vec4(angles_to_pos(PolarAngleIndex[0], AzimuthAngleIndex[0], uSlicesCount), 1.0);
   EmitVertex();
 
-  gl_Position = uCameraPos * uScale
+  gl_Position = uViewMat * uModelMat
     * vec4(
-      angles_to_pos(PolarAngleIndex[0], (AzimuthAngleIndex[0] + uint(1)) % uStepsCount, uStepsCount),
+      angles_to_pos(PolarAngleIndex[0], (AzimuthAngleIndex[0] + uint(1)) % uSlicesCount, uSlicesCount),
       1.0
     );
   EmitVertex();

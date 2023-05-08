@@ -8,12 +8,11 @@ struct DirectionalLight {
   vec3 specular;
 };
 
-struct PointLight {
-  vec3 position;
-
+struct Material {
   vec3 ambient;
   vec3 diffuse;
   vec3 specular;
+  float shininess;
 };
 
 in vec3 Normal;
@@ -21,12 +20,12 @@ in vec3 FragPos;
 
 out vec4 FragColor;
 
-uniform DirectionalLight DirLight;
-uniform vec3 ViewPos;
+uniform DirectionalLight uDirLight;
+uniform Material uMaterial;
+uniform vec3 uViewPos;
 
 vec3 calcDirectionalLight(
-  vec3 meterial,
-  float shininess,
+  Material meterial,
   DirectionalLight light,
   vec3 normal,
   vec3 viewDir
@@ -34,16 +33,14 @@ vec3 calcDirectionalLight(
 
 void main() {
   vec3 norm = normalize(Normal);
-  vec3 viewDir = normalize(ViewPos - FragPos);
+  vec3 viewDir = normalize(uViewPos - FragPos);
+  vec3 result = calcDirectionalLight(uMaterial, uDirLight, norm, viewDir);
 
-  vec3 objectColor = vec3(0.2, 0.5, 0.7);
-  vec3 result = calcDirectionalLight(objectColor, 33, DirLight, norm, viewDir);
   FragColor = vec4(result, 1.0);
 }
 
 vec3 calcDirectionalLight(
-  vec3 material,
-  float shininess,
+  Material material,
   DirectionalLight light,
   vec3 normal,
   vec3 viewDir
@@ -53,14 +50,11 @@ vec3 calcDirectionalLight(
   float diff = max(dot(normal, lightDirection), 0.0);
 
   vec3 reflectDirection = reflect(-lightDirection, normal);
-  float spec = pow(max(dot(viewDir, reflectDirection), 0.0), shininess);
+  float spec = pow(max(dot(viewDir, reflectDirection), 0.0), material.shininess * 128.0);
 
-  // vec3 ambient = light.ambient * material;
-  // vec3 diffuse = light.diffuse * diff * material;
-  // vec3 specular = light.specular * spec * material;
-  vec3 ambient = light.ambient * material;
-  vec3 diffuse = light.diffuse * diff * material;
-  vec3 specular = light.specular * spec * material;
+  vec3 ambient = light.ambient * material.ambient;
+  vec3 diffuse = light.diffuse * diff * material.diffuse;
+  vec3 specular = light.specular * spec * material.specular;
 
   return (ambient + diffuse + specular);
 }

@@ -11,9 +11,42 @@ out vec3 FragPos;
 
 uniform uint uSlicesCount;
 uniform float uRadius;
+uniform mat4 uModelMat;
+uniform mat4 uViewMat;
 
-uniform mat4 uScale;
-uniform mat4 uCamera;
+vec3 anglesToPos(uint polarAngleIndex, uint azimuthAngleIndex, uint stepsCount);
+vec3 calcNormal(vec3 p1, vec3 p2, vec3 p3);
+
+void main() {
+  vec3 a1 = anglesToPos(PolarAngleIndex[0] + uint(1), AzimuthAngleIndex[0], uSlicesCount);
+  vec4 p1 = uViewMat * uModelMat * vec4(a1, 1.0);
+
+  vec3 a2 = anglesToPos(PolarAngleIndex[0], AzimuthAngleIndex[0], uSlicesCount);
+  vec4 p2 = uViewMat * uModelMat * vec4(a2, 1.0);
+
+  vec3 a3 = anglesToPos(
+    PolarAngleIndex[0] + uint(1),
+    (AzimuthAngleIndex[0] + uint(1)) % uSlicesCount,
+    uSlicesCount
+  );
+  vec4 p3 = uViewMat * uModelMat * vec4(a3, 1.0);
+
+  vec3 a4 = anglesToPos(PolarAngleIndex[0], (AzimuthAngleIndex[0] + uint(1)) % uSlicesCount, uSlicesCount);
+  vec4 p4 = uViewMat * uModelMat * vec4(a4, 1.0);
+
+  Normal = mat3(transpose(inverse(uModelMat))) * calcNormal(a1, a2, a3);
+  FragPos = vec3(uModelMat * vec4((a1.x + a2.x + a3.x + a4.x) / 4.0, (a1.y + a2.y + a3.y + a4.y) / 4.0, (a1.z + a2.z + a3.z + a4.z) / 4.0, 1.0));
+
+  gl_Position = p1;
+  EmitVertex();
+  gl_Position = p2;
+  EmitVertex();
+  gl_Position = p3;
+  EmitVertex();
+  gl_Position = p4;
+  EmitVertex();
+  EndPrimitive();
+}
 
 vec3 anglesToPos(uint polarAngleIndex, uint azimuthAngleIndex, uint stepsCount) {
   #define PI 3.1415926538
@@ -40,34 +73,4 @@ vec3 calcNormal(vec3 p1, vec3 p2, vec3 p3) {
   vec3 v = p3 - p1;
 
   return vec3(u.y * v.z - u.z * v.y, u.z * v.x - u.x * v.z, u.x * v.y - u.y * v.x);
-}
-
-void main() {
-  vec4 p1 = uCamera * uScale
-    * vec4(anglesToPos(PolarAngleIndex[0] + uint(1), AzimuthAngleIndex[0], uSlicesCount), 1.0);
-  vec4 p2 = uCamera * uScale
-    * vec4(anglesToPos(PolarAngleIndex[0], AzimuthAngleIndex[0], uSlicesCount), 1.0);
-  vec4 p3 = uCamera * uScale
-    * vec4(
-      anglesToPos(PolarAngleIndex[0] + uint(1), (AzimuthAngleIndex[0] + uint(1)) % uSlicesCount, uSlicesCount),
-      1.0
-    );
-  vec4 p4 = uCamera * uScale
-    * vec4(
-      anglesToPos(PolarAngleIndex[0], (AzimuthAngleIndex[0] + uint(1)) % uSlicesCount, uSlicesCount),
-      1.0
-    );
-
-  Normal = calcNormal(p1.xyz, p2.xyz, p3.xyz);
-  FragPos = vec3((p1.x + p4.x) / 3.0, (p1.y + p4.y) / 3.0, (p1.z + p4.z) / 3.0);
-
-  gl_Position = p1;
-  EmitVertex();
-  gl_Position = p2;
-  EmitVertex();
-  gl_Position = p3;
-  EmitVertex();
-  gl_Position = p4;
-  EmitVertex();
-  EndPrimitive();
 }
