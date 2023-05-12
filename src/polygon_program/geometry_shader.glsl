@@ -8,6 +8,7 @@ layout (triangle_strip, max_vertices = 4) out;
 
 out vec3 Normal;
 out vec3 FragPos;
+out vec2 TexCoord;
 
 uniform uint uSlicesCount;
 uniform float uRadius;
@@ -19,6 +20,11 @@ vec3 anglesToPos(uint polarAngleIndex, uint azimuthAngleIndex, uint stepsCount);
 vec3 calcNormal(vec3 p1, vec3 p2, vec3 p3);
 
 void main() {
+  TexCoord = vec2(
+    float(AzimuthAngleIndex[0]) / float(uSlicesCount),
+    float(PolarAngleIndex[0]) / float(uSlicesCount)
+  );
+
   vec3 a1 = anglesToPos(PolarAngleIndex[0] + uint(1), AzimuthAngleIndex[0], uSlicesCount);
   vec4 p1 = uProjectionMat * uViewMat * uModelMat * vec4(a1, 1.0);
 

@@ -6,6 +6,7 @@ mod error;
 mod renderer;
 mod shader_program;
 mod array;
+mod texture;
 
 #[derive(Debug)]
 pub enum ShaderKind {
